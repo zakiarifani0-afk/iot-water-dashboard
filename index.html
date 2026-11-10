@@ -6,9 +6,7 @@
     <title>Dashboard Monitoring IoT</title>
     
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
         body {
             background-color: #121c21; 
             color: #e0e0e0;
@@ -22,16 +20,36 @@
         h1 {
             color: #00e5ff;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 15px;
             text-transform: uppercase;
             letter-spacing: 2px;
         }
+        
+        /* === DESAIN BADGE STATUS ON/OFF === */
+        .status-container {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 8px 25px;
+            border-radius: 30px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #fff;
+            background-color: #f39c12; /* Warna kuning menunggu data */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            transition: all 0.4s ease;
+            letter-spacing: 1px;
+        }
+
         .click-hint {
             color: #6b8286;
             margin-bottom: 20px;
             font-style: italic;
             font-size: 0.9em;
         }
+
         .dashboard-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -83,6 +101,7 @@
             color: #00e5ff;
             margin: 15px 0;
             text-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
+            transition: color 0.3s ease;
         }
         .card-front .unit {
             font-size: 1.1em;
@@ -121,14 +140,18 @@
             line-height: 1.6;
             flex-grow: 1;
         }
-        .legend-box b {
-            color: #ffffff;
-        }
+        .legend-box b { color: #ffffff; }
     </style>
 </head>
 <body>
 
     <h1>🌐 Live Dashboard Sistem Air</h1>
+    
+    <!-- Lencana Status Sistem -->
+    <div class="status-container">
+        <div class="status-badge" id="status-badge">MENUNGGU DATA...</div>
+    </div>
+
     <div class="click-hint">Klik kartu untuk melihat rumus perhitungan</div>
 
     <div class="dashboard-container">
@@ -138,7 +161,7 @@
             <div class="card-inner">
                 <div class="card-front">
                     <h3>Debit Air</h3>
-                    <div class="value" id="val-debit">0.0</div>
+                    <div class="value" id="val-debit">0.00</div>
                     <div class="unit">Liter / Menit</div>
                 </div>
                 <div class="card-back">
@@ -246,18 +269,53 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-
         const monitoringRef = db.ref('DataSensor');
+        
+        // Deklarasi variabel pengawas (Watchdog Timer)
+        let connectionWatchdog;
+        const statusBadge = document.getElementById('status-badge');
 
         monitoringRef.on('value', (snapshot) => {
             const data = snapshot.val();
             
             if (data) {
+                // 1. ESP32 Berhasil Ngirim Data -> Status ON
+                statusBadge.innerText = "● SYSTEM ON (ONLINE)";
+                statusBadge.style.backgroundColor = "#00c853"; // Hijau terang
+                
+                // Kembalikan warna angka jadi biru terang jika sebelumnya merah
+                const valueElements = document.querySelectorAll('.value');
+                valueElements.forEach(el => el.style.color = "#00e5ff");
+
+                // 2. Tampilkan Data Asli dari ESP32
                 document.getElementById('val-level').innerText = (data.ketinggian || 0).toFixed(1);
                 document.getElementById('val-debit').innerText = (data.debit || 0).toFixed(2);
                 document.getElementById('val-speed').innerText = (data.kecepatan || 0).toFixed(2);
                 document.getElementById('val-volume').innerText = (data.volume || 0).toFixed(2);
                 document.getElementById('val-time').innerText = (data.waktu || 0);
+
+                // 3. Reset (Hapus) Stopwatch Pengawas lama
+                clearTimeout(connectionWatchdog);
+
+                // 4. Mulai Hitung Mundur 4 Detik Baru
+                // Jika selama 4 detik ESP32 tidak mengirim "detak jantung" baru, kode ini akan jalan
+                connectionWatchdog = setTimeout(() => {
+                    
+                    // Ubah Status Jadi OFF
+                    statusBadge.innerText = "○ SYSTEM OFF (OFFLINE)";
+                    statusBadge.style.backgroundColor = "#d50000"; // Merah
+                    
+                    // Ubah warna angka jadi merah abu-abu menandakan mati
+                    valueElements.forEach(el => el.style.color = "#ff5252");
+
+                    // RESET SEMUA ANGKA KE 0!
+                    document.getElementById('val-level').innerText = "0.0";
+                    document.getElementById('val-debit').innerText = "0.00";
+                    document.getElementById('val-speed').innerText = "0.00";
+                    document.getElementById('val-volume').innerText = "0.00";
+                    document.getElementById('val-time').innerText = "0";
+                    
+                }, 4000); 
             }
         });
     </script>
